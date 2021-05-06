@@ -1,32 +1,18 @@
-minetest.register_on_player_hpchange(function(player, hp_change, reason)
-	if reason.type ~= "punch" or not reason.object or not reason.object:is_player() then
-		return hp_change
-	end
+ctf.register_on_attack(function(player, hitter, time_from_last_punch, tool_capabilities, dir)
+	if tool_capabilities.damage_groups.nopunch then return end
 
-	local class = ctf_classes.get(reason.object)
+	local class = ctf_classes.get(hitter)
 
-	if class.properties.melee_bonus and reason.object:get_wielded_item():get_name():find("sword") then
-		local change = hp_change - class.properties.melee_bonus
-
-		if player:get_hp() + change <= 0 and player:get_hp() + hp_change > 0 then
-			local wielded_item = reason.object:get_wielded_item()
-
-			for i = 1, #ctf.registered_on_killedplayer do
-				ctf.registered_on_killedplayer[i](
-					player:get_player_name(),
-					reason.object:get_player_name(),
-					wielded_item,
-					wielded_item:get_tool_capabilities()
-				)
-			end
+	if class.properties.melee_bonus and hitter:get_wielded_item():get_name():find("sword") then
+		if time_from_last_punch > 1 then
+			time_from_last_punch = 1
+		elseif time_from_last_punch < 0.5 then
+			time_from_last_punch = 0.5
 		end
 
-		return change
+		player:punch(hitter, 1, {damage_groups = {fleshy = time_from_last_punch*2, nopunch = 1}}, dir)
 	end
-
-	return hp_change
-end, true)
-
+end)
 
 local sword_special_timer = {}
 local SWORD_SPECIAL_COOLDOWN = 20
@@ -68,7 +54,6 @@ minetest.register_tool("ctf_classes:sword_bronze", {
 		end
 
 		local pteam = ctf.player(pname).team
-
 		if not pteam then -- can be nil during map change
 			return
 		end

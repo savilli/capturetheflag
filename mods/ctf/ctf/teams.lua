@@ -458,13 +458,6 @@ function ctf.register_on_attack(func)
 	table.insert(ctf.registered_on_attack, func)
 end
 
-local dead_players = {}
-minetest.register_on_respawnplayer(function(player)
-	dead_players[player:get_player_name()] = nil
-end)
-minetest.register_on_joinplayer(function(player)
-	dead_players[player:get_player_name()] = nil
-end)
 minetest.register_on_punchplayer(function(player, hitter,
 		time_from_last_punch, tool_capabilities, dir, damage, ...)
 	if player and hitter then
@@ -473,10 +466,6 @@ minetest.register_on_punchplayer(function(player, hitter,
 
 		local to = ctf.player(pname)
 		local from = ctf.player(hname)
-
-		if dead_players[pname] then
-			return
-		end
 
 		if to.team == from.team and to.team ~= "" and
 				to.team ~= nil and to.name ~= from.name then
@@ -496,18 +485,7 @@ minetest.register_on_punchplayer(function(player, hitter,
 			return true
 		end
 
-		local hp = player:get_hp()
-		if hp == 0 then
-			return false
-		end
-
-		if hp - damage <= 0 then
-			dead_players[pname] = true
-			local wielded = hitter:get_wielded_item()
-			for i = 1, #ctf.registered_on_killedplayer do
-				ctf.registered_on_killedplayer[i](pname, hname,
-						wielded, tool_capabilities)
-			end
+		if player:get_hp() == 0 then
 			return false
 		end
 
@@ -516,6 +494,13 @@ minetest.register_on_punchplayer(function(player, hitter,
 				player, hitter, time_from_last_punch,
 				tool_capabilities, dir, damage, ...
 			)
+		end
+
+		local hp = player:get_hp() -- hp can be changed in registered_on_attack callbacks
+		if hp > 0 and hp <= damage then
+			for i = 1, #ctf.registered_on_killedplayer do
+				ctf.registered_on_killedplayer[i](pname, hname,	tool_capabilities)
+			end
 		end
 	end
 end)
