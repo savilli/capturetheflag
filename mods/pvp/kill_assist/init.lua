@@ -14,55 +14,51 @@ function kill_assist.add_assist(victim, attacker, damage)
 	if victim == attacker then return end
 
 	if not kill_assists[victim] then
-		kill_assists[victim] = {
-			players = {},
-			hp_offset = 0
-		}
+		kill_assists[victim] = {}
 	end
 
-	kill_assists[victim].players[attacker] = (kill_assists[victim].players[attacker] or 0) + damage
-end
-
-function kill_assist.add_heal_assist(victim, healed_hp)
-	if not kill_assists[victim] then return end
-
-	kill_assists[victim].hp_offset = kill_assists[victim].hp_offset + healed_hp
+	kill_assists[victim][attacker] = (kill_assists[victim][attacker] or 0) + damage
 end
 
 function kill_assist.reward_assists(victim, killer, reward)
-	local max_hp = minetest.get_player_by_name(victim):get_properties().max_hp or 20
+	local hp = minetest.get_player_by_name(victim):get_hp()
+	kill_assist.add_assist(victim, killer, hp)
 
-	if not kill_assists[victim] then
-		if victim ~= killer then
-			kill_assist.add_assist(victim, killer, max_hp)
-		else
-			return
+	local kill_assists1 = {}
+	local all_damage = 0
+	for name, damage in pairs(kill_assists[victim]) do
+		if minetest.get_player_by_name(name) then
+			all_damage = all_damage + damage
+			kill_assists1[name] = damage
 		end
 	end
 
-	for name, damage in pairs(kill_assists[victim].players) do
-		if minetest.get_player_by_name(name) then
-			local help_percent = damage / (max_hp + kill_assists[victim].hp_offset)
-			local main, match = ctf_stats.player(name)
-			local color = "0x00FFFF"
-
-			if name == killer or help_percent >= 0.33 then
-				reward = math.max(math.floor((reward * help_percent)*100)/100, 1)
-			end
-
-			match.score = match.score + reward
-			main.score = main.score + reward
-
-			if name == killer then
-				color = "0x00FF00"
-			end
-
-			hud_score.new(name, {
-				name = "kill_assist:score",
-				color = color,
-				value = reward
-			})
+	local kill_assists2 = {}
+	local counted_damage = 0
+	for name, damage in pairs(kill_assists1) do
+		if name == killer or damage / all_damage >= 0.33 then
+			counted_damage = counted_damage + damage
+			kill_assists2[name] = damage
 		end
+	end
+
+	for name, damage in pairs(kill_assists2) do
+		reward = math.max(math.floor(reward * damage * 100 / counted_damage) / 100, 1)
+
+		local main, match = ctf_stats.player(name)
+		match.score = match.score + reward
+		main.score = main.score + reward
+
+		local color = "0x00FFFF"
+		if name == killer then
+			color = "0x00FF00"
+		end
+
+		hud_score.new(name, {
+			name = "kill_assist:score",
+			color = color,
+			value = reward
+		})
 	end
 
 	ctf_stats.request_save()
@@ -70,6 +66,10 @@ function kill_assist.reward_assists(victim, killer, reward)
 end
 
 ctf.register_on_killedplayer(function(victim, killer, _, toolcaps)
+	if victim == killer then
+		return
+	end
+
 	local reward = ctf_stats.calculateKillReward(victim, killer, toolcaps)
 	reward = math.floor(reward * 100) / 100
 	kill_assist.reward_assists(victim, killer, reward)
